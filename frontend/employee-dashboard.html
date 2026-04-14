@@ -1,0 +1,121 @@
+<!-- frontend/employee-dashboard.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Employee Dashboard - ShopHub</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg navbar-dark">
+    <div class="container">
+      <a class="navbar-brand" href="/">ShopHub</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav ms-auto">
+          <li class="nav-item"><a class="nav-link active" href="#">Dashboard</a></li>
+          <li class="nav-item"><a class="nav-link" href="#" id="logoutBtn">Logout</a></li>
+          <li class="nav-item"><a class="nav-link dark-toggle" id="darkModeToggle"><i class="fas fa-moon"></i></a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container mt-4">
+    <h4>Employee Dashboard - <span id="userName"></span></h4>
+    
+    <div class="row mt-4">
+      <div class="col-md-4">
+        <div class="card">
+          <div class="card-body text-center">
+            <h5>Daily Attendance</h5>
+            <button id="checkInBtn" class="btn btn-success m-2">Check In</button>
+            <button id="checkOutBtn" class="btn btn-danger m-2">Check Out</button>
+            <div id="attendanceStatus" class="mt-2"></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-8">
+        <div class="card">
+          <div class="card-body">
+            <h5>Assigned Deliveries</h5>
+            <div id="deliveriesList"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/js/common.js"></script>
+  <script>
+    async function loadAttendance() {
+      const attendance = await apiRequest('/api/attendance/me');
+      const today = new Date().toISOString().split('T')[0];
+      const todayRecord = attendance.find(a => a.date === today);
+      const statusDiv = document.getElementById('attendanceStatus');
+      if (todayRecord) {
+        statusDiv.innerHTML = `Checked In: ${new Date(todayRecord.checkIn).toLocaleTimeString()} ${todayRecord.checkOut ? '<br>Checked Out: ' + new Date(todayRecord.checkOut).toLocaleTimeString() : ''}`;
+      } else {
+        statusDiv.innerHTML = 'Not checked in today';
+      }
+    }
+
+    async function loadDeliveries() {
+      const orders = await apiRequest('/api/orders/assigned');
+      const container = document.getElementById('deliveriesList');
+      if (orders.length === 0) {
+        container.innerHTML = '<p>No assigned deliveries</p>';
+        return;
+      }
+      container.innerHTML = orders.map(order => `
+        <div class="border p-3 mb-2 rounded">
+          <p><strong>Order ID:</strong> ${order._id}</p>
+          <p><strong>Customer:</strong> ${order.userId?.name || 'N/A'}</p>
+          <p><strong>Address:</strong> ${order.address}</p>
+          <p><strong>Total:</strong> $${order.total}</p>
+          <p><strong>Status:</strong> ${order.status}</p>
+          <select id="status-${order._id}" class="form-select w-50 d-inline">
+            <option value="Out for Delivery" ${order.status === 'Out for Delivery' ? 'selected' : ''}>Out for Delivery</option>
+            <option value="Delivered" ${order.status === 'Delivered' ? 'selected' : ''}>Delivered</option>
+          </select>
+          <button class="btn btn-sm btn-primary" onclick="updateStatus('${order._id}')">Update</button>
+        </div>
+      `).join('');
+    }
+
+    async function updateStatus(orderId) {
+      const newStatus = document.getElementById(`status-${orderId}`).value;
+      await apiRequest(`/api/orders/${orderId}/status`, 'PUT', { status: newStatus });
+      showToast('Status updated', 'success');
+      loadDeliveries();
+    }
+
+    document.getElementById('checkInBtn').onclick = async () => {
+      await apiRequest('/api/attendance/checkin', 'POST');
+      showToast('Checked in successfully', 'success');
+      loadAttendance();
+    };
+    document.getElementById('checkOutBtn').onclick = async () => {
+      await apiRequest('/api/attendance/checkout', 'POST');
+      showToast('Checked out successfully', 'success');
+      loadAttendance();
+    };
+    document.getElementById('logoutBtn').onclick = logout;
+
+    (async () => {
+      const user = getCurrentUser();
+      if (!user || user.role !== 'employee') window.location.href = '/login.html';
+      document.getElementById('userName').innerText = user.name;
+      await loadAttendance();
+      await loadDeliveries();
+    })();
+    initDarkMode();
+  </script>
+</body>
+</html>

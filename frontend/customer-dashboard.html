@@ -1,0 +1,294 @@
+<!-- frontend/customer-dashboard.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Customer Dashboard - ShopHub</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg navbar-dark">
+    <div class="container">
+      <a class="navbar-brand" href="/">ShopHub</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav ms-auto">
+          <li class="nav-item"><a class="nav-link active" href="#">Dashboard</a></li>
+          <li class="nav-item"><a class="nav-link" href="#" id="cartLink"><i class="fas fa-shopping-cart"></i> Cart <span id="cartCount" class="cart-badge">0</span></a></li>
+          <li class="nav-item"><a class="nav-link" href="#" id="logoutBtn">Logout</a></li>
+          <li class="nav-item"><a class="nav-link dark-toggle" id="darkModeToggle"><i class="fas fa-moon"></i></a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container mt-4">
+    <h4>Welcome, <span id="userName"></span>!</h4>
+    
+    <!-- Search and Filter -->
+    <div class="row mt-3 mb-4">
+      <div class="col-md-6">
+        <input type="text" id="searchInput" class="form-control" placeholder="Search products...">
+      </div>
+      <div class="col-md-3">
+        <select id="categoryFilter" class="form-select">
+          <option value="">All Categories</option>
+          <option value="Electronics">Electronics</option>
+          <option value="Accessories">Accessories</option>
+          <option value="Wearables">Wearables</option>
+          <option value="Sports">Sports</option>
+          <option value="Home">Home</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <button class="btn btn-outline-primary w-100" data-bs-toggle="modal" data-bs-target="#addressModal">Manage Addresses</button>
+      </div>
+    </div>
+
+    <!-- Products Grid -->
+    <h5>Products</h5>
+    <div class="row" id="productsContainer"></div>
+
+    <!-- Cart Modal -->
+    <div class="modal fade" id="cartModal" tabindex="-1">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Your Cart</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body" id="cartItems"></div>
+          <div class="modal-footer">
+            <h5>Total: $<span id="cartTotal">0</span></h5>
+            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#checkoutModal">Proceed to Checkout</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Checkout Modal -->
+    <div class="modal fade" id="checkoutModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Checkout</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <label>Select Address</label>
+              <select id="addressSelect" class="form-select"></select>
+            </div>
+            <div class="mb-3">
+              <label>Payment Method</label>
+              <select id="paymentMethod" class="form-select">
+                <option value="COD">Cash on Delivery</option>
+                <option value="UPI">BHIM UPI</option>
+              </select>
+            </div>
+            <div id="upiSimulation" class="d-none">
+              <input type="text" class="form-control mt-2" placeholder="Enter UPI ID (simulate)">
+              <button class="btn btn-sm btn-info mt-2" onclick="simulateUPIPayment()">Simulate Payment</button>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-primary" onclick="placeOrder()">Place Order</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Address Modal -->
+    <div class="modal fade" id="addressModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Manage Addresses</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <div id="addressList"></div>
+            <input type="text" id="newAddress" class="form-control mt-2" placeholder="New Address">
+            <button class="btn btn-primary mt-2" onclick="addAddress()">Add Address</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/js/common.js"></script>
+  <script>
+    let cart = JSON.parse(localStorage.getItem('cart') || '[]');
+    let products = [];
+    let userAddresses = [];
+
+    function updateCartUI() {
+      document.getElementById('cartCount').innerText = cart.reduce((sum, i) => sum + i.quantity, 0);
+      localStorage.setItem('cart', JSON.stringify(cart));
+    }
+
+    async function loadProducts() {
+      const search = document.getElementById('searchInput').value;
+      const category = document.getElementById('categoryFilter').value;
+      let url = '/api/products';
+      const params = new URLSearchParams();
+      if (search) params.append('search', search);
+      if (category) params.append('category', category);
+      if (params.toString()) url += '?' + params.toString();
+      
+      products = await apiRequest(url);
+      renderProducts();
+    }
+
+    function renderProducts() {
+      const container = document.getElementById('productsContainer');
+      container.innerHTML = products.map(p => `
+        <div class="col-md-3 col-6 mb-4">
+          <div class="card product-card h-100">
+            <img src="${p.imageUrl}" class="card-img-top" style="height: 180px; object-fit: cover;">
+            <div class="card-body">
+              <h6>${p.name}</h6>
+              <p>$${p.price}</p>
+              <button class="btn btn-sm btn-primary w-100" onclick="addToCart('${p._id}', '${p.name}', ${p.price})">Add to Cart</button>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function addToCart(id, name, price) {
+      const existing = cart.find(i => i.productId === id);
+      if (existing) existing.quantity++;
+      else cart.push({ productId: id, name, price, quantity: 1 });
+      updateCartUI();
+      showToast('Added to cart', 'success');
+    }
+
+    function showCart() {
+      const cartItemsDiv = document.getElementById('cartItems');
+      if (cart.length === 0) {
+        cartItemsDiv.innerHTML = '<p>Cart is empty</p>';
+        document.getElementById('cartTotal').innerText = '0';
+      } else {
+        cartItemsDiv.innerHTML = cart.map((item, idx) => `
+          <div class="d-flex justify-content-between mb-2">
+            <span>${item.name} x ${item.quantity}</span>
+            <span>$${item.price * item.quantity}</span>
+            <button class="btn btn-sm btn-danger" onclick="removeFromCart(${idx})">Remove</button>
+          </div>
+        `).join('');
+        const total = cart.reduce((sum, i) => sum + i.price * i.quantity, 0);
+        document.getElementById('cartTotal').innerText = total;
+      }
+      new bootstrap.Modal(document.getElementById('cartModal')).show();
+    }
+
+    function removeFromCart(index) {
+      cart.splice(index, 1);
+      updateCartUI();
+      showCart();
+    }
+
+   async function loadAddresses() {
+  const user = getCurrentUser();
+  if (!user) return;
+  
+  userAddresses = user.addresses || [];
+  
+  const addressSelect = document.getElementById('addressSelect');
+  const addressListDiv = document.getElementById('addressList');
+  
+  if (!addressSelect) return;
+  
+  if (userAddresses.length === 0) {
+    addressSelect.innerHTML = '<option value="">No addresses saved. Add one below.</option>';
+    addressSelect.disabled = true;
+    if (addressListDiv) addressListDiv.innerHTML = '<div class="alert alert-info">No addresses yet. Click "Add Address".</div>';
+  } else {
+    addressSelect.disabled = false;
+    addressSelect.innerHTML = userAddresses.map(addr => `<option value="${addr}">${addr}</option>`).join('');
+    if (addressListDiv) addressListDiv.innerHTML = userAddresses.map(addr => `<div class="alert alert-secondary">${addr}</div>`).join('');
+  }
+}
+
+    async function addAddress() {
+  const newAddr = document.getElementById('newAddress').value;
+  if (!newAddr) {
+    showToast('Please enter an address', 'warning');
+    return;
+  }
+  
+  userAddresses.push(newAddr);
+  await apiRequest('/api/users/addresses', 'PUT', { addresses: userAddresses });
+  
+  const user = getCurrentUser();
+  user.addresses = userAddresses;
+  localStorage.setItem('user', JSON.stringify(user));
+  
+  loadAddresses();  // updates the address modal list
+  
+  // Also update the checkout dropdown if the cart modal is open
+  const checkoutAddressSelect = document.getElementById('addressSelect');
+  if (checkoutAddressSelect) {
+    checkoutAddressSelect.innerHTML = userAddresses.map(addr => `<option value="${addr}">${addr}</option>`).join('');
+    checkoutAddressSelect.disabled = false;
+  }
+  
+  document.getElementById('newAddress').value = '';
+  showToast('Address added', 'success');
+}
+    async function placeOrder() {
+      const address = document.getElementById('addressSelect').value;
+      const paymentMethod = document.getElementById('paymentMethod').value;
+      if (!address) return showToast('Select address', 'danger');
+      if (paymentMethod === 'UPI') {
+        showToast('Please complete UPI simulation first', 'warning');
+        return;
+      }
+      const orderData = {
+        items: cart.map(i => ({ productId: i.productId, name: i.name, price: i.price, quantity: i.quantity })),
+        total: cart.reduce((sum, i) => sum + i.price * i.quantity, 0),
+        address,
+        paymentMethod
+      };
+      await apiRequest('/api/orders', 'POST', orderData);
+      cart = [];
+      updateCartUI();
+      showToast('Order placed successfully!', 'success');
+      bootstrap.Modal.getInstance(document.getElementById('cartModal')).hide();
+      bootstrap.Modal.getInstance(document.getElementById('checkoutModal')).hide();
+    }
+
+    function simulateUPIPayment() {
+      showToast('UPI Payment Simulated! Proceed to place order.', 'success');
+      document.getElementById('paymentMethod').value = 'COD';
+    }
+
+    document.getElementById('searchInput').addEventListener('input', loadProducts);
+    document.getElementById('categoryFilter').addEventListener('change', loadProducts);
+    document.getElementById('cartLink').addEventListener('click', (e) => { e.preventDefault(); showCart(); });
+    document.getElementById('logoutBtn').addEventListener('click', logout);
+    
+    document.getElementById('paymentMethod').addEventListener('change', (e) => {
+      const upiDiv = document.getElementById('upiSimulation');
+      upiDiv.classList.toggle('d-none', e.target.value !== 'UPI');
+    });
+
+    (async () => {
+      const user = getCurrentUser();
+      if (!user || user.role !== 'customer') window.location.href = '/login.html';
+      document.getElementById('userName').innerText = user.name;
+      await loadProducts();
+      updateCartUI();
+      await loadAddresses();
+    })();
+    initDarkMode();
+  </script>
+</body>
+</html>

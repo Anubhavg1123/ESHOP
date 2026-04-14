@@ -1,0 +1,235 @@
+<!-- frontend/manager-dashboard.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manager Dashboard - ShopHub</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg navbar-dark">
+    <div class="container">
+      <a class="navbar-brand" href="/">ShopHub</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav ms-auto">
+          <li class="nav-item"><a class="nav-link active" href="#">Dashboard</a></li>
+          <li class="nav-item"><a class="nav-link" href="#" id="logoutBtn">Logout</a></li>
+          <li class="nav-item"><a class="nav-link dark-toggle" id="darkModeToggle"><i class="fas fa-moon"></i></a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container mt-4">
+    <h4>Manager Dashboard - <span id="userName"></span></h4>
+    
+    <ul class="nav nav-tabs mt-3" id="managerTabs">
+      <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#products">Products</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#users">Users</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#orders">Orders</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#assign">Assign Delivery</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#charts">Analytics</button></li>
+    </ul>
+
+    <div class="tab-content mt-3">
+      <!-- Products Tab -->
+      <div class="tab-pane fade show active" id="products">
+        <button class="btn btn-primary mb-3" data-bs-toggle="modal" data-bs-target="#productModal" onclick="clearProductForm()">Add Product</button>
+        <div id="productsList" class="row"></div>
+      </div>
+
+      <!-- Users Tab -->
+      <div class="tab-pane fade" id="users">
+        <div id="usersList"></div>
+      </div>
+
+      <!-- Orders Tab -->
+      <div class="tab-pane fade" id="orders">
+        <div id="ordersList"></div>
+      </div>
+
+      <!-- Assign Delivery Tab -->
+      <div class="tab-pane fade" id="assign">
+        <div class="row">
+          <div class="col-md-6">
+            <h5>Unassigned Orders</h5>
+            <div id="unassignedOrders"></div>
+          </div>
+          <div class="col-md-6">
+            <h5>Employees</h5>
+            <div id="employeesList"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Charts Tab -->
+      <div class="tab-pane fade" id="charts">
+        <canvas id="ordersChart" width="400" height="200"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Product Modal -->
+  <div class="modal fade" id="productModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Product</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="productId">
+          <input type="text" id="prodName" class="form-control mb-2" placeholder="Name">
+          <input type="number" id="prodPrice" class="form-control mb-2" placeholder="Price">
+          <textarea id="prodDesc" class="form-control mb-2" placeholder="Description"></textarea>
+          <input type="text" id="prodCategory" class="form-control mb-2" placeholder="Category">
+          <input type="text" id="prodImage" class="form-control mb-2" placeholder="Image URL">
+          <input type="number" id="prodStock" class="form-control mb-2" placeholder="Stock">
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-primary" onclick="saveProduct()">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/js/common.js"></script>
+  <script>
+    let allProducts = [], allUsers = [], allOrders = [], employees = [];
+
+    async function loadProducts() {
+      allProducts = await apiRequest('/api/products');
+      const container = document.getElementById('productsList');
+      container.innerHTML = allProducts.map(p => `
+        <div class="col-md-3 mb-3">
+          <div class="card">
+            <img src="${p.imageUrl}" class="card-img-top" style="height: 150px;">
+            <div class="card-body">
+              <h6>${p.name}</h6>
+              <p>$${p.price}</p>
+              <button class="btn btn-sm btn-warning" onclick="editProduct('${p._id}')">Edit</button>
+              <button class="btn btn-sm btn-danger" onclick="deleteProduct('${p._id}')">Delete</button>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function loadUsers() {
+      allUsers = await apiRequest('/api/users');
+      const container = document.getElementById('usersList');
+      container.innerHTML = `<table class="table"><tr><th>Name</th><th>Email</th><th>Role</th></tr>${allUsers.map(u => `<tr><td>${u.name}</td><td>${u.email}</td><td>${u.role}</td></tr>`).join('')}</table>`;
+      employees = allUsers.filter(u => u.role === 'employee');
+      document.getElementById('employeesList').innerHTML = employees.map(e => `<div class="alert alert-secondary" id="emp-${e._id}">${e.name}</div>`).join('');
+    }
+
+    async function loadOrders() {
+      allOrders = await apiRequest('/api/orders');
+      const container = document.getElementById('ordersList');
+      container.innerHTML = `<table class="table"><tr><th>Order ID</th><th>Total</th><th>Status</th><th>Assigned To</th></tr>${allOrders.map(o => `<tr><td>${o._id}</td><td>$${o.total}</td><td>${o.status}</td><td>${o.assignedTo?.name || 'Unassigned'}</td></tr>`).join('')}</table>`;
+      
+      const unassigned = allOrders.filter(o => !o.assignedTo);
+      document.getElementById('unassignedOrders').innerHTML = unassigned.map(o => `
+        <div class="alert alert-warning">
+          Order ${o._id} - $${o.total}
+          <select id="assignSelect-${o._id}" class="form-select mt-1">
+            <option value="">Select Employee</option>
+            ${employees.map(e => `<option value="${e._id}">${e.name}</option>`).join('')}
+          </select>
+          <button class="btn btn-sm btn-success mt-1" onclick="assignOrder('${o._id}')">Assign</button>
+        </div>
+      `).join('');
+    }
+
+    async function assignOrder(orderId) {
+      const select = document.getElementById(`assignSelect-${orderId}`);
+      const employeeId = select.value;
+      if (!employeeId) return showToast('Select employee', 'danger');
+      await apiRequest(`/api/orders/${orderId}/assign`, 'PUT', { employeeId });
+      showToast('Order assigned', 'success');
+      loadOrders();
+    }
+
+    function clearProductForm() {
+      document.getElementById('productId').value = '';
+      document.getElementById('prodName').value = '';
+      document.getElementById('prodPrice').value = '';
+      document.getElementById('prodDesc').value = '';
+      document.getElementById('prodCategory').value = '';
+      document.getElementById('prodImage').value = '';
+      document.getElementById('prodStock').value = '';
+    }
+
+    function editProduct(id) {
+      const p = allProducts.find(p => p._id === id);
+      if (p) {
+        document.getElementById('productId').value = p._id;
+        document.getElementById('prodName').value = p.name;
+        document.getElementById('prodPrice').value = p.price;
+        document.getElementById('prodDesc').value = p.description;
+        document.getElementById('prodCategory').value = p.category;
+        document.getElementById('prodImage').value = p.imageUrl;
+        document.getElementById('prodStock').value = p.stock;
+        new bootstrap.Modal(document.getElementById('productModal')).show();
+      }
+    }
+
+    async function saveProduct() {
+      const id = document.getElementById('productId').value;
+      const productData = {
+        name: document.getElementById('prodName').value,
+        price: parseFloat(document.getElementById('prodPrice').value),
+        description: document.getElementById('prodDesc').value,
+        category: document.getElementById('prodCategory').value,
+        imageUrl: document.getElementById('prodImage').value,
+        stock: parseInt(document.getElementById('prodStock').value)
+      };
+      if (id) {
+        await apiRequest(`/api/products/${id}`, 'PUT', productData);
+      } else {
+        await apiRequest('/api/products', 'POST', productData);
+      }
+      bootstrap.Modal.getInstance(document.getElementById('productModal')).hide();
+      loadProducts();
+      showToast('Product saved', 'success');
+    }
+
+    async function deleteProduct(id) {
+      if (confirm('Delete product?')) {
+        await apiRequest(`/api/products/${id}`, 'DELETE');
+        loadProducts();
+        showToast('Deleted', 'success');
+      }
+    }
+
+    function renderChart() {
+      const statusCounts = { Pending: 0, Assigned: 0, 'Out for Delivery': 0, Delivered: 0 };
+      allOrders.forEach(o => statusCounts[o.status]++);
+      new Chart(document.getElementById('ordersChart'), {
+        type: 'bar',
+        data: { labels: Object.keys(statusCounts), datasets: [{ label: 'Orders', data: Object.values(statusCounts), backgroundColor: '#2874f0' }] }
+      });
+    }
+
+    document.getElementById('logoutBtn').onclick = logout;
+    (async () => {
+      const user = getCurrentUser();
+      if (!user || user.role !== 'manager') window.location.href = '/login.html';
+      document.getElementById('userName').innerText = user.name;
+      await loadProducts();
+      await loadUsers();
+      await loadOrders();
+      renderChart();
+    })();
+    initDarkMode();
+  </script>
+</body>
+</html>
